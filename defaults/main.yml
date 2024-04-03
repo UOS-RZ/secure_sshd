@@ -1,8 +1,9 @@
+---
 sshd_config_filepath: /etc/ssh/sshd_config
 
 # General SSH settings
 sshd_ssh_protocol_version: 2
-sshd_log_level: VERBOSE # default: INFO
+sshd_log_level: INFO
 
 # Ciphers and keying
 sshd_keyexchange_algorithms: diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256
