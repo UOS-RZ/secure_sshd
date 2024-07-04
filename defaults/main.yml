@@ -31,3 +31,9 @@ sshd_root_login: prohibit-password
 # Valid options are `yes` or `no`
 # Warning: Ensure these values are quoted in yaml.
 sshd_password_login: 'no'
+
+# If managed by ansible, we should be able to set all settings in
+# the main sshd_config file. So we can disable the loading of other
+# sshd config files in order to avoid unwanted overrides.
+# E.g. cloud-init might override the PasswordAuthentication setting.
+sshd_no_includes: true

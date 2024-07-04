@@ -14,3 +14,11 @@
     state: present
     regex: '^#?LogLevel'
     line: 'LogLevel {{ sshd_log_level }}'
+
+- name: Disable loading of other sshd config files
+  ansible.builtin.lineinfile:
+    dest: '{{ sshd_config_filepath }}'
+    regexp: '^Include \/etc\/ssh\/sshd_config\.d\/\*\.conf'
+    line: '#Include /etc/ssh/sshd_config.d/*.conf'
+  notify: Restart sshd
+  when: sshd_no_includes
