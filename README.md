@@ -7,6 +7,7 @@ The files explained:
 - [`ansible.cfg`](ansible.cfg): General ansible configuration and role locations
 - [`deploy.yml`](deploy.yml): Ansible Playbook including the `secure_sshd` role
 - [`hosts.yml`](hosts.yml): Inventory file specifying the hosts to run the playbook on
+- [`requirements.yml`](requirements.yml): Requirements file specifying dependencies for `ansible-galaxy`
 
 ## Quick Start
 
@@ -40,4 +41,20 @@ Edit [`deploy.yml`](deploy.yml) and set:
   roles:
     - role: secure_sshd
       sshd_root_login: 'no'
+```
+
+## Role Version
+
+You can specify the exact version of the `secure_sshd` role you want in `requirements.yml`.
+To update to a newer version, edit the file and set the version you want:
+
+```yaml
+- src: https://github.com/UOS-RZ/secure_sshd.git
+  scm: git
+  version: 1.0.0
+```
+
+The force an update by running `ansible-galaxy`:
+```
+❯ ansible-galaxy install --force -r requirements.yml
 ```
