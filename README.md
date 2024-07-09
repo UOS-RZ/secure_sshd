@@ -51,7 +51,7 @@ To update to a newer version, edit the file and set the version you want:
 ```yaml
 - src: https://github.com/UOS-RZ/secure_sshd.git
   scm: git
-  version: 1.0.0
+  version: 1.1.0
 ```
 
 The force an update by running `ansible-galaxy`:
