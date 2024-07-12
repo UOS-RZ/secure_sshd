@@ -4,3 +4,4 @@
   become: true
   roles:
     - role: secure_sshd
+      sshd_root_login: 'no'
