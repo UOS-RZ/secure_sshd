@@ -18,10 +18,16 @@ jobs:
             version: 9-Stream
           - dist: rockylinux
             version: '9'
+          - dist: rockylinux
+            version: '10'
           - dist: debian
             version: bookworm
+          - dist: debian
+            version: trixie
           - dist: ubuntu
             version: jammy
+          - dist: ubuntu
+            version: noble
 
     steps:
       - uses: actions/checkout@v5
