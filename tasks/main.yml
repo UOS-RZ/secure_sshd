@@ -1,31 +1,150 @@
 ---
 - name: Ensure sshd_config.d directory exists
+  become: true
   ansible.builtin.file:
-    dest: '{{ sshd_config_directory }}/sshd_config.d'
+    dest: '{{ secure_sshd_config_directory }}/sshd_config.d'
     state: directory
     owner: root
     group: root
     mode: '0700'
 
-- name: Ensure include path is in sshd_config
-  ansible.builtin.lineinfile:
-    dest: '{{ sshd_config_filepath }}'
-    line: 'Include {{ sshd_config_directory }}/sshd_config.d/*.conf'
-  notify: Restart sshd
+# jinja2 is not allowed in 'when', so we create a variable which can include jinja2...
+- name: Set sshd config include line
+  ansible.builtin.set_fact:
+    include_line: 'Include {{ secure_sshd_config_directory }}/sshd_config.d/*.conf'
 
-- name: Create override configuration file
-  ansible.builtin.template:
-    src: 01-uos-cert.conf.j2
-    dest: '{{ sshd_config_directory }}/sshd_config.d/01-uos-cert.conf'
+- name: Check last line of sshd config for Include
+  become: true
+  ansible.builtin.command:
+    cmd: tail -n 1 '{{ secure_sshd_config_filepath }}'
+  register: last_line
+  changed_when: false
+
+- name: Move include path in sshd_config
+  when: last_line.stdout != include_line
+  notify: Restart sshd
+  become: true
+  block:
+    - name: Remove include path
+      ansible.builtin.lineinfile:
+        state: absent
+        dest: '{{ secure_sshd_config_filepath }}'
+        line: '{{ include_line }}'
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Ensure include path is at the end in sshd_config
+      ansible.builtin.lineinfile:
+        dest: '{{ secure_sshd_config_filepath }}'
+        line: '{{ include_line }}'
+        owner: root
+        group: root
+        mode: '0600'
+        insertafter: EOF
+
+- name: Set Allowed Kex/Ciphers/MACs
+  become: true
+  ansible.builtin.blockinfile:
+    path: "{{ secure_sshd_config_filepath }}"
+    marker: "# {mark} UOS CERT SSH Hardening"
+    state: present
+    insertbefore: "^Include .*"
     owner: root
     group: root
     mode: '0600'
+    block: |
+      Ciphers {{ secure_sshd_ciphers | join(",") }}
+      MACs {{ secure_sshd_macs | join(",") }}
+      GSSAPIKexAlgorithms {{ secure_sshd_gss_kex_algorithms | join(",") }}
+      KexAlgorithms {{ secure_sshd_kex_algorithms | join(",") }}
+      HostKeyAlgorithms {{ secure_sshd_hostkey_algorithms | join(",") }}
+      CASignatureAlgorithms {{ secure_sshd_ca_signature_algorithms | join(",") }}
+      {% if ansible_distribution == "Ubuntu" and ansible_distribution_version == "22.04" %}
+      # RequiredRSASize {{ secure_sshd_required_rsa_keysize_bits }} # Not working
+      {% else %}
+      RequiredRSASize {{ secure_sshd_required_rsa_keysize_bits }}
+      {% endif %}
   notify: Restart sshd
 
-- name: Globally disable crypto policy for sshd on RedHat
-  ansible.builtin.lineinfile:
-    dest: /etc/sysconfig/sshd
-    regexp: '^CRYPTO_POLICY='
-    line: 'CRYPTO_POLICY='
+- name: Change config
+  become: true
   notify: Restart sshd
-  when: ansible_os_family == 'RedHat'
+  block:
+    - name: Loop over sshd_config
+      ansible.builtin.lineinfile:
+        path: "{{ secure_sshd_config_filepath }}"
+        regexp: "{{ item.regex }}"
+        state: present
+        line: "{{ item.line }}"
+        owner: root
+        group: root
+        mode: '0600'
+        backrefs: true
+      loop:
+        - regex: '^#?LogLevel '
+          line: "Loglevel {{ secure_sshd_log_level }}"
+        - regex: '^#?HostKey /etc/ssh/ssh_host_ed25519_key'
+          line: "HostKey /etc/ssh/ssh_host_ed25519_key"
+        - regex: '^#?HostKey /etc/ssh/ssh_host_rsa_key'
+          line: "#HostKey /etc/ssh/ssh_host_rsa_key"
+        - regex: '^#?PermitRootLogin'
+          line: "PermitRootLogin {{ secure_sshd_permit_root_login }}"
+        - regex: '^#?PubkeyAuthentication'
+          line: "PubkeyAuthentication {{ secure_sshd_publickey_authentication }}"
+        - regex: '^#?PasswordAuthentication'
+          line: "PasswordAuthentication {{ secure_sshd_password_authentication }}"
+        - regex: '^#?Protocol'
+          line: "Protocol {{ secure_sshd_protocol_version }}"
+        - regex: '^#?LoginGraceTime '
+          line: 'LoginGraceTime {{ secure_sshd_login_grace_time }}'
+        - regex: '^#?MaxAuthTries '
+          line: 'MaxAuthTries {{ secure_sshd_max_auth_tries }}'
+        - regex: '^#?UsePAM '
+          line: 'UsePAM {{ secure_sshd_use_pam }}'
+        - regex: '^#?MaxSessions '
+          line: 'MaxSessions {{ secure_sshd_max_sessions }}'
+        - regex: '^#?MaxStartups '
+          line: 'MaxStartups {{ secure_sshd_max_startups }}'
+        - regex: '^#?StrictModes '
+          line: 'StrictModes {{ secure_sshd_strict_mode }}'
+        - regex: '^#?X11Forwarding '
+          line: 'X11Forwarding {{ secure_sshd_allow_x11_forwarding }}'
+        - regex: '^#?Compression '
+          line: 'Compression {{ secure_sshd_compression }}'
+        - regex: '^#?TCPKeepAlive '
+          line: 'TCPKeepAlive {{ secure_sshd_tcp_keep_alive }}'
+        - regex: '^#?PrintMotd '
+          line: 'PrintMotd {{ secure_sshd_print_motd }}'
+        - regex: '^#?PrintLastLog '
+          line: 'PrintLastLog {{ secure_sshd_print_last_login }}'
+        - regex: '^#AllowAgentForwarding '
+          line: 'AllowAgentForwarding {{ secure_sshd_allow_agent_forwarding }}'
+        - regex: '^#?AllowTcpForwarding '
+          line: 'AllowTcpForwarding {{ secure_sshd_allow_tcp_forwarding }}'
+        - regex: '^#?PermitEmptyPasswords '
+          line: 'PermitEmptyPasswords {{ secure_sshd_permit_empty_passwords }}'
+        - regex: '^#?GSSAPIAuthentication '
+          line: 'GSSAPIAuthentication {{ secure_sshd_gssapi_auth }}'
+        - regex: '^#?KerberosAuthentication '
+          line: 'KerberosAuthentication {{ secure_sshd_kerberos_auth }}'
+        - regex: '^#?RekeyLimit '
+          line: 'RekeyLimit {{ secure_sshd_rekeylimit }}'
+        - regex: '^#?PermitTunnel '
+          line: 'PermitTunnel {{ secure_sshd_permit_tunnel }}'
+      loop_control:
+        label: "{{ item.line }}"
+
+- name: Disable DSA/ECDSA host key
+  become: true
+  ansible.builtin.lineinfile:
+    path: "{{ secure_sshd_config_filepath }}"
+    regexp: "{{ item }}"
+    state: absent
+    backrefs: true
+    owner: root
+    group: root
+    mode: '0600'
+  with_items:
+    - '^#?HostKey /etc/ssh/ssh_host_dsa_key'
+    - '^#?HostKey /etc/ssh/ssh_host_ecdsa_key'
