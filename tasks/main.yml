@@ -28,4 +28,4 @@
     regexp: '^CRYPTO_POLICY='
     line: 'CRYPTO_POLICY='
   notify: Restart sshd
-  when: ansible_os_family == 'RedHat'
+  when: ansible_facts['os_family'] == 'RedHat'
